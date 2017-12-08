@@ -9,7 +9,7 @@ Description:         BBDB (http://savannah.nongnu.org/projects/bbdb/) is a
                      manipulate the data all from within Haskell.  See
                      the hackage docs for usage and examples.
 
-Homepage:            http://www.nadineloveshenry.com/haskell/database-bbdb.html
+Homepage:            https://github.com/henrylaxen/bbdb
 License:             GPL-3
 License-file:        LICENSE
 Author:              Henry Laxen
