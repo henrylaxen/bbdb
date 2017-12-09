@@ -34,9 +34,8 @@ Test-Suite bbdb-tests
   hs-source-dirs:      src,test
   Other-modules:       Database.BBDB,
                        BBDBSpec
-  
   Build-depends:
-                base >= 3 && <= 5,
-                hspec
-
+    base >= 3 && <= 5,
+    hspec,
+    parsec >= 3
 
