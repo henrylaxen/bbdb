@@ -20,6 +20,10 @@ Bug-reports:         mailto:nadine.and.henry@pobox.com
 Category:            Database
 Build-type:          Simple
 Extra-source-files:  changelog.md
+                     LICENSE
+                     README.md
+                     test/sampleData.txt
+                     
 Cabal-version:       >=1.8
 
 Library
