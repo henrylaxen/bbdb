@@ -1,16 +1,24 @@
 module BBDBSpec where
 
+import Foundation  hiding ((<|>))
+import Foundation.IO (readFile)
+import Foundation.String ( replace, Encoding(UTF8), fromBytes  )
+import Foundation.VFS.FilePath (FilePath)
+
 import Database.BBDB
 import Test.Hspec
 
 spec :: Spec
 spec = do
-  bbdbString <- runIO $ readFile "test/sampleData.txt"
+  w8a <- runIO $ readFile "test/sampleData.txt"
+  let (bbdbString, _, _) = fromBytes UTF8 w8a
   describe "Read BBDB file" $ do
     let
       Right bbdb = parseBBDB bbdbString
+      b :: [BBDB]
       b = justEntries bbdb
-      me = head b
+      me :: BBDB
+      me = head . fromMaybe (error "is empty")  . nonEmpty $ b
     it "can parse the sample file as a String" $ do
       (length bbdbString) `shouldBe` 942
       (length bbdb) `shouldBe` 4
@@ -30,3 +38,4 @@ spec = do
         wanted x = lastName x == Just "lastname"
         r = filterBBDB wanted bbdb
       length r `shouldBe` 1
+

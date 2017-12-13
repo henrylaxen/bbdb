@@ -1,5 +1,3 @@
-{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies,
-FlexibleContexts, OverloadedStrings, UndecidableInstances, StandaloneDeriving, FlexibleInstances, TypeSynonymInstances, NoImplicitPrelude #-}
 -- | 
 -- This module can read and write BBDB files, and provides a few handy
 -- functions for getting at fields inside of BBDB data.
@@ -127,17 +125,15 @@ module Database.BBDB
   ) -} where
 
 import Foundation  hiding ((<|>))
-import Foundation.IO (readFile)
-import Foundation.String ( replace )
+import Foundation.IO ( readFile )
+import Foundation.String ( replace, Encoding(UTF8), fromBytes )
+import Foundation.VFS.FilePath ( FilePath )
 import Text.Parsec.Prim
-import Text.Parsec.Error
+    ( Stream(..), Parsec, try, parse, many, (<|>), (<?>) )
+import Text.Parsec.Error ( ParseError )
 import Text.Parsec.Combinator
+    ( sepBy1, sepBy, many1, eof, between )
 import Text.Parsec.Char
--- import Text.Parsec.String (Parser) -- type Parser = Parsec String ()
--- import Text.Parsec hiding ((<|>))
--- import Control.Applicative hiding (many)
--- import Data.Maybe
--- import Data.List
 
 instance (Monad m) => Stream String m Char  where
   uncons = return . Foundation.uncons
@@ -291,6 +287,12 @@ unwords = intercalate " "
 unLines :: [String] -> String
 unLines = intercalate "\n"
 
+lookup :: (Eq a) => a -> [(a,b)] -> Maybe b
+lookup _[]          =  Nothing
+lookup  k ((x,y):xys)
+    | k == x    =  Just y
+    | otherwise =  lookup k xys
+
 phoneParser :: Parser Phone
 phoneParser = do
       _ <- char '[' 
@@ -312,90 +314,53 @@ phonesParser =
         try nil
     <|> Just <$> betweenParens (sepBy phoneParser space)
 
-
--- singleAddress :: Parser Address
--- singleAddress = do
---     _ <- char '['
---     locationF <- quotedString
---     _ <- space
---     streetsF <- stringsOrNil
---     _ <- space
---     cityF <- stringOrNil
---     _ <- space
---     stateF <- stringOrNil
---     _ <- space
---     zipF <- stringOrNil
---     _ <- space
---     countryF <- stringOrNil
---     _ <- char ']'
---     return $ Address locationF streetsF cityF stateF zipF countryF
-
-
 singleAddress :: Parser Address
 singleAddress =
-        char '[' *>
-        (Address <$>
-        quotedString <* space <*> 
-        stringsOrNil <* space <*> 
-        stringOrNil  <* space <*> 
-        stringOrNil  <* space <*> 
-        stringOrNil  <* space <*> 
-        stringOrNil  <* char ']')
-
+  char '[' *>
+  (Address <$>
+  quotedString <* space <*> 
+  stringsOrNil <* space <*> 
+  stringOrNil  <* space <*> 
+  stringOrNil  <* space <*> 
+  stringOrNil  <* space <*> 
+  stringOrNil) <* char ']'
 
 addressesParser :: Parser (Maybe [Address])
 addressesParser = 
         nil
     <|> Just <$> betweenParens (sepBy singleAddress space)
-
     
 lispSymbol :: Parser Symbol
 lispSymbol = fromList <$> many1 (alphaNum <|> oneOf "-_") 
 
-
-
 alist :: Parser Alist
 alist = betweenParens $
         (,) <$> lispSymbol <*> (string " . " *> quotedString)
-
 
 notesParser :: Parser (Maybe Note)
 notesParser = 
        nil
    <|> Just <$> betweenParens (Note <$> sepBy alist space)
 
-bbdbEntry :: Parser BBDB              
-bbdbEntry = do
-  _ <- char '['
-  firstNameF   <- stringOrNil
-  _ <- space
-  lastNameF    <- stringOrNil
-  _ <- space
-  affixF       <- stringsOrNil
-  _ <- space
-  akaF         <- stringsOrNil
-  _ <- space
-  companyF     <- stringsOrNil
-  _ <- space
-  phoneSF      <- phonesParser
-  _ <- space
-  addresseSF   <- addressesParser
-  _ <- space
-  netF         <- stringsOrNil
-  _ <- space
-  noteSF       <- notesParser
-  _ <- space
-  hashF        <- quotedString
-  _ <- space
-  creationF    <- quotedString
-  _ <- space
-  modifcationF <- quotedString
-  _ <- space
-  _ <- string "nil"
-  _ <- char ']'
-  return $ BBDB firstNameF lastNameF affixF akaF companyF phoneSF addresseSF
-    netF noteSF hashF creationF modifcationF
-
+bbdbEntry :: Parser BBDB   
+bbdbEntry = 
+  char '[' *>
+  (BBDB <$>
+  stringOrNil      <* space <*> 
+  stringOrNil      <* space <*> 
+  stringsOrNil     <* space <*> 
+  stringsOrNil     <* space <*> 
+  stringsOrNil     <* space <*>
+  phonesParser     <* space <*>
+  addressesParser  <* space <*>
+  stringsOrNil     <* space <*>
+  notesParser      <* space <*>
+  quotedString     <* space <*>
+  quotedString     <* space <*>
+  quotedString)
+  <* space
+  <* string "nil"
+  <* char ']'
 
 -- | The Parser for a BBDB file, as it is written on disk.  If you
 -- read a .bbdb file with:
@@ -415,11 +380,6 @@ bbdbFileParse = do
   return $ fmap BBDBComment comments <> fmap BBDBEntry entries
   where
     commentLine = fromList <$> (char ';' *> (many (noneOf "\n\r") <* endOfLine))
-    -- commentLinex = do
-    --   _ <- char ';'
-    --   c <- many (noneOf "\n\r")
-    --   _ <- endOfLine
-    --   return (fromList c)
 
 -- | converts a BBDB comment to nothing, and a BBDB entry to just the entry
 justEntry :: BBDBFile -> Maybe BBDB
@@ -435,9 +395,9 @@ surroundWith :: Monoid a => a -> a -> a -> a
 surroundWith before after str = before <> str <> after
 
 surroundWithQuotes, surroundWithBrackets, surroundWithParens :: String -> String
-surroundWithQuotes = surroundWith "\"" "\""
-surroundWithBrackets = surroundWithBrackets
-surroundWithParens = surroundWith "(" ")"
+surroundWithQuotes   = surroundWith "\"" "\""
+surroundWithBrackets = surroundWith "[" "]"
+surroundWithParens   = surroundWith "(" ")"
 
 
 -- | convert a Haskell string to a string that Lisp likes
@@ -462,14 +422,16 @@ class LispAble s where
 instance LispAble String where
   asLisp = escapeLisp  
 
+withNil :: (a -> String) -> Maybe a -> String
+withNil _ Nothing = "nil"
+withNil f (Just x) = f x
+
 instance LispAble (Maybe String) where
-  asLisp   Nothing = "nil"
-  asLisp   (Just x) = surroundWithQuotes . escapeLisp $ x
+  asLisp = withNil (surroundWithQuotes . escapeLisp)
 
 instance LispAble (Maybe [String]) where
-  asLisp   Nothing = "nil"
-  asLisp   (Just x) = surroundWithParens . unwords .
-                        fmap (surroundWithQuotes . asLisp) $ x
+  asLisp = withNil (surroundWithParens . unwords .
+                    fmap (surroundWithQuotes . asLisp))
 
 instance LispAble Phone where
   asLisp (USStyle loc numbers) =
@@ -480,8 +442,7 @@ instance LispAble Phone where
     surroundWithQuotes numbers
 
 instance LispAble (Maybe [Phone]) where
-  asLisp   Nothing = "nil"
-  asLisp   (Just x) = surroundWithParens . unwords . fmap asLisp $ x
+  asLisp = withNil (surroundWithParens . unwords . fmap asLisp)
 
 instance LispAble Address where
   asLisp x = surroundWithBrackets $ unwords 
@@ -493,9 +454,7 @@ instance LispAble Address where
      asLisp (country x)]
 
 instance LispAble (Maybe [Address]) where
-  asLisp   Nothing = "nil"
-  asLisp   (Just x) = surroundWithParens . unwords .
-                        fmap asLisp $ x
+  asLisp = withNil (surroundWithParens . unwords .fmap asLisp)
 
 instance LispAble Alist where
   asLisp x = surroundWithParens $
@@ -506,9 +465,7 @@ instance LispAble Note where
                       fmap asLisp $ x
   
 instance LispAble (Maybe Note) where
-  asLisp   Nothing = "nil"
-  asLisp   (Just x) = surroundWithParens . unwords . 
-                        fmap asLisp $ unnote x
+  asLisp = withNil (surroundWithParens . unwords . fmap asLisp . unnote)
                         
 instance LispAble BBDB where
   asLisp x = surroundWithBrackets $ unwords 
@@ -524,19 +481,16 @@ instance LispAble BBDB where
     asLisp (Just (hash x)),
     asLisp (Just (creation x)),
     asLisp (Just (modification x)),
-    (fromList "nil")
+    "nil"
    ]
 
 instance LispAble BBDBFile where
-  asLisp (BBDBComment x) = x
+  asLisp (BBDBComment x) = ";" <> x
   asLisp (BBDBEntry x) = asLisp x
 
 -- | the inverse of bbdbFileParse
 instance LispAble [BBDBFile] where
-  asLisp = unLines . fmap asLisp
-
--- unlines :: [String] -> [String]
--- unlines = intercalate NewLine
+  asLisp x = (unLines . fmap asLisp $ x) <> "\n"
 
 -- | parse the string as a BBDB File
 parseBBDB :: String -> Either ParseError [BBDBFile]
@@ -544,11 +498,12 @@ parseBBDB  = parse bbdbFileParse "bbdb"
 
 -- | read the given file and call error if the parse failed,
 -- otherwise return the entire file as a list of BBDBFile records.
--- readBBDB :: String -> IO [BBDBFile]
--- readBBDB filename = do
---   b <- fmap fromList (readFile (fromString filename))
---   let ls = parseBBDB b
---   return . either (error . show)  id $ ls
+readBBDB :: FilePath -> IO [BBDBFile]
+readBBDB filename = do
+  w8a <- readFile filename
+  let (b, _, _) = fromBytes UTF8 w8a
+  let ls = parseBBDB b
+  return . either (error . show)  id $ ls
 
 -- | Notes inside a BBDB record are awkward to get at.  This helper
 -- function digs into the record and applies a function to each
@@ -626,4 +581,31 @@ filterBBDB f = filter g
     g (BBDBEntry x) = f x    
 
   
-
+usPhone :: Phone
+usPhone = USStyle "home" ["+1", "775", "624", "9011"]
+itPhone :: Phone
+itPhone = InternationalStyle "work" "+52 (376) 765-3181"
+ad1 :: Address
+ad1 = Address "home" (Just ["Via Alta #6", "Gaviotas #10"])
+                     (Just "Chapala")
+                     (Just "Jalisco")
+                     (Just "45900")
+                     (Just "Mexico")
+notes1 :: Note
+notes1 = (Note [("notes", "Always split aces and eights"),
+               ("birthday", "6/15")])
+b1 :: BBDB
+b1 = BBDB
+     (Just "Henry")
+     (Just "Laxen")
+     Nothing
+     Nothing
+     (Just ["Elegant Solutions"])
+     (Just [usPhone, itPhone])
+     (Just [ad1])
+     Nothing
+     (Just notes1)
+     "hash"
+     "creation"
+     "modification"
+     

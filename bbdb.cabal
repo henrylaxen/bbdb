@@ -1,5 +1,5 @@
 Name:                bbdb
-Version:             0.6.1
+Version:             0.7
 Synopsis:            Ability to read, write, and modify BBDB files
 Description:         BBDB (http://savannah.nongnu.org/projects/bbdb/) is a
                      contact management utility that can be used with
@@ -24,15 +24,17 @@ Extra-source-files:  changelog.md
                      README.md
                      test/sampleData.txt
                      
-Cabal-version:       >=1.8
+Cabal-version:       >=1.10
 
 Library
   Exposed-modules:     Database.BBDB
   hs-source-dirs:      src
   ghc-options:         -Wall
+  default-language:    Haskell2010
   default-extensions:  NoImplicitPrelude,
                        FlexibleInstances,
-                       TypeSynonymInstances
+                       MultiParamTypeClasses,
+                       OverloadedStrings
   Build-depends:
                 base >= 3 && <= 5,
                 parsec >= 3,
@@ -45,8 +47,14 @@ Test-Suite bbdb-tests
   hs-source-dirs:      src,test
   Other-modules:       Database.BBDB,
                        BBDBSpec
+  default-language:    Haskell2010
+  default-extensions:  NoImplicitPrelude,
+                       FlexibleInstances,
+                       MultiParamTypeClasses,
+                       OverloadedStrings
   Build-depends:
-    base >= 3 && <= 5,
-    hspec,
-    parsec >= 3
+                base >= 3 && <= 5,
+                hspec,
+                parsec >= 3,
+                foundation
 
