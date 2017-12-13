@@ -1,5 +1,5 @@
-{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, FlexibleContexts,
-             UndecidableInstances, StandaloneDeriving, FlexibleInstances, TypeSynonymInstances, NoImplicitPrelude #-}
+{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies,
+FlexibleContexts, OverloadedStrings, UndecidableInstances, StandaloneDeriving, FlexibleInstances, TypeSynonymInstances, NoImplicitPrelude #-}
 -- | 
 -- This module can read and write BBDB files, and provides a few handy
 -- functions for getting at fields inside of BBDB data.
@@ -128,6 +128,7 @@ module Database.BBDB
 
 import Foundation  hiding ((<|>))
 import Foundation.IO (readFile)
+import Foundation.String ( replace )
 import Text.Parsec.Prim
 import Text.Parsec.Error
 import Text.Parsec.Combinator
@@ -272,12 +273,10 @@ nil = string "nil" >> return Nothing
 
 strings :: Parser [String]
 strings = betweenParens (sepBy quotedString space)
-  
 
 stringOrNil :: Parser (Maybe String)
 stringOrNil = 
     nil <|> Just <$> quotedString <?> "nil or string"
-
 
 stringsOrNil :: Parser (Maybe [String])
 stringsOrNil = 
@@ -285,6 +284,12 @@ stringsOrNil =
         
 listOfInts :: Parser [String]
 listOfInts = sepBy1 digits space
+
+unwords :: [String] -> String
+unwords = intercalate " "
+
+unLines :: [String] -> String
+unLines = intercalate "\n"
 
 phoneParser :: Parser Phone
 phoneParser = do
@@ -426,17 +431,18 @@ justEntries :: [BBDBFile] -> [BBDB]
 justEntries = mapMaybe justEntry
 
 -- | surround a string with the given two characters  
-surroundWith :: a -> a -> [a] -> [a]
-surroundWith before after str = before : str <> [after]
+surroundWith :: Monoid a => a -> a -> a -> a
+surroundWith before after str = before <> str <> after
+
+surroundWithQuotes, surroundWithBrackets, surroundWithParens :: String -> String
+surroundWithQuotes = surroundWith "\"" "\""
+surroundWithBrackets = surroundWithBrackets
+surroundWithParens = surroundWith "(" ")"
+
 
 -- | convert a Haskell string to a string that Lisp likes
 escapeLisp :: String -> String
-escapeLisp = error "escapeLisp"
--- escapeLisp [] = []
--- escapeLisp (c:cs) = 
---   case c of
---     '"' -> '\\' : '"' : escapeLisp cs
---     _ -> c : escapeLisp cs
+escapeLisp = replace "'" "\\'"
 
 -- | LispAble is how we convert from our internal representation of a
 -- BBDB record, to one that will make Lisp and Emacs happy.  (Sans bugs)
@@ -458,27 +464,27 @@ instance LispAble String where
 
 instance LispAble (Maybe String) where
   asLisp   Nothing = "nil"
-  asLisp   (Just x) = surroundWith '"' '"' . escapeLisp $ x
+  asLisp   (Just x) = surroundWithQuotes . escapeLisp $ x
 
 instance LispAble (Maybe [String]) where
   asLisp   Nothing = "nil"
-  asLisp   (Just x) = surroundWith '(' ')' . unwords .
-                        fmap (surroundWith '"' '"' . asLisp) $ x
+  asLisp   (Just x) = surroundWithParens . unwords .
+                        fmap (surroundWithQuotes . asLisp) $ x
 
 instance LispAble Phone where
   asLisp (USStyle loc numbers) =
-    surroundWith '[' ']' $ surroundWith '"' '"' loc <> " " <> 
+    surroundWithBrackets $ surroundWithQuotes loc <> " " <> 
     unwords numbers
-  asLisp (InternationalStyle location numbers) =  
-    surroundWith '[' ']' $ surroundWith '"' '"' location <> " " <> 
-    surroundWith '"' '"' numbers
+  asLisp (InternationalStyle xlocation numbers) =  
+    surroundWithBrackets $ surroundWithQuotes xlocation <> " " <> 
+    surroundWithQuotes numbers
 
 instance LispAble (Maybe [Phone]) where
   asLisp   Nothing = "nil"
-  asLisp   (Just x) = surroundWith '(' ')' . unwords . fmap asLisp $ x
+  asLisp   (Just x) = surroundWithParens . unwords . fmap asLisp $ x
 
 instance LispAble Address where
-  asLisp x = surroundWith '[' ']' $ unwords 
+  asLisp x = surroundWithBrackets $ unwords 
     [asLisp $ Just (location x),
      asLisp (streets x),
      asLisp (city x),
@@ -488,24 +494,24 @@ instance LispAble Address where
 
 instance LispAble (Maybe [Address]) where
   asLisp   Nothing = "nil"
-  asLisp   (Just x) = surroundWith '(' ')' . unwords .
+  asLisp   (Just x) = surroundWithParens . unwords .
                         fmap asLisp $ x
 
 instance LispAble Alist where
-  asLisp x = surroundWith '(' ')' $
+  asLisp x = surroundWithParens $
     key x <> " . " <> asLisp (Just (value x))
 
 instance LispAble Note where
-  asLisp (Note x)  = surroundWith '(' ')' . unwords .
+  asLisp (Note x)  = surroundWithParens . unwords .
                       fmap asLisp $ x
   
 instance LispAble (Maybe Note) where
   asLisp   Nothing = "nil"
-  asLisp   (Just x) = surroundWith '(' ')' . unwords . 
+  asLisp   (Just x) = surroundWithParens . unwords . 
                         fmap asLisp $ unnote x
                         
 instance LispAble BBDB where
-  asLisp x = surroundWith '[' ']' $ unwords 
+  asLisp x = surroundWithBrackets $ unwords 
    [asLisp (firstName x),
     asLisp (lastName x),
     asLisp (affix x),
@@ -527,10 +533,10 @@ instance LispAble BBDBFile where
 
 -- | the inverse of bbdbFileParse
 instance LispAble [BBDBFile] where
-  asLisp = unlines . fmap asLisp
+  asLisp = unLines . fmap asLisp
 
-unlines :: [String] -> [String]
-unlines = intercalate NewLine
+-- unlines :: [String] -> [String]
+-- unlines = intercalate NewLine
 
 -- | parse the string as a BBDB File
 parseBBDB :: String -> Either ParseError [BBDBFile]
