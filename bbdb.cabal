@@ -29,7 +29,7 @@ Cabal-version:       >=1.10
 Library
   Exposed-modules:     Database.BBDB
   hs-source-dirs:      src
-  ghc-options:         -Wall
+  ghc-options:         -Wall -fno-warn-orphans
   default-language:    Haskell2010
   default-extensions:  NoImplicitPrelude,
                        FlexibleInstances,
