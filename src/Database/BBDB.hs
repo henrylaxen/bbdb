@@ -126,9 +126,9 @@ module Database.BBDB
     filterBBDB 
   ) -} where
 
-import Foundation
+import Foundation  hiding ((<|>))
 import Foundation.IO (readFile)
-import Text.Parsec.Prim hiding ((<|>))
+import Text.Parsec.Prim
 import Text.Parsec.Error
 import Text.Parsec.Combinator
 import Text.Parsec.Char
@@ -139,10 +139,7 @@ import Text.Parsec.Char
 -- import Data.List
 
 instance (Monad m) => Stream String m Char  where
-  uncons = return . decompose . nonEmpty
-    where
-      decompose Nothing = Nothing
-      decompose (Just s) = Just (head s, tail s)
+  uncons = return . Foundation.uncons
 
 type Parser = Parsec String ()
 
@@ -311,23 +308,34 @@ phonesParser =
     <|> Just <$> betweenParens (sepBy phoneParser space)
 
 
-singleAddress :: Parser Address
-singleAddress = do
-    _ <- char '['
-    locationF <- quotedString
-    _ <- space
-    streetsF <- stringsOrNil
-    _ <- space
-    cityF <- stringOrNil
-    _ <- space
-    stateF <- stringOrNil
-    _ <- space
-    zipF <- stringOrNil
-    _ <- space
-    countryF <- stringOrNil
-    _ <- char ']'
-    return $ Address locationF streetsF cityF stateF zipF countryF
+-- singleAddress :: Parser Address
+-- singleAddress = do
+--     _ <- char '['
+--     locationF <- quotedString
+--     _ <- space
+--     streetsF <- stringsOrNil
+--     _ <- space
+--     cityF <- stringOrNil
+--     _ <- space
+--     stateF <- stringOrNil
+--     _ <- space
+--     zipF <- stringOrNil
+--     _ <- space
+--     countryF <- stringOrNil
+--     _ <- char ']'
+--     return $ Address locationF streetsF cityF stateF zipF countryF
 
+
+singleAddress :: Parser Address
+singleAddress =
+        char '[' *>
+        (Address <$>
+        quotedString <* space <*> 
+        stringsOrNil <* space <*> 
+        stringOrNil  <* space <*> 
+        stringOrNil  <* space <*> 
+        stringOrNil  <* space <*> 
+        stringOrNil  <* char ']')
 
 
 addressesParser :: Parser (Maybe [Address])
@@ -401,7 +409,12 @@ bbdbFileParse = do
   eof
   return $ fmap BBDBComment comments <> fmap BBDBEntry entries
   where
-    commentLine = fromList <$> char ';' <*> (many (noneOf "\n\r") <* endOfLine)
+    commentLine = fromList <$> (char ';' *> (many (noneOf "\n\r") <* endOfLine))
+    -- commentLinex = do
+    --   _ <- char ';'
+    --   c <- many (noneOf "\n\r")
+    --   _ <- endOfLine
+    --   return (fromList c)
 
 -- | converts a BBDB comment to nothing, and a BBDB entry to just the entry
 justEntry :: BBDBFile -> Maybe BBDB
