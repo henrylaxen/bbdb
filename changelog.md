@@ -1,6 +1,10 @@
 Changes for Database/BBDB
 =========================
 
+from 0.7 -> 0.8
+---------------
+Changed back from Foundation to Prelude to prevent breakage.
+
 from 0.6 -> 0.7
 ---------------
 Changed over to Foundation rather than Prelude.

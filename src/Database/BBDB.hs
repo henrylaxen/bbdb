@@ -382,6 +382,11 @@ justEntries = mapMaybe justEntry
 surroundWith :: a -> a -> [a] -> [a]
 surroundWith before after str = before : str ++ [after]
 
+surroundWithQuotes, surroundWithBrackets, surroundWithParens :: String -> String
+surroundWithQuotes   = surroundWith '"' '"'
+surroundWithBrackets = surroundWith '[' ']'
+surroundWithParens   = surroundWith '(' ')'
+
 -- | convert a Haskell string to a string that Lisp likes
 escapeLisp :: String -> String
 escapeLisp [] = []
@@ -410,27 +415,27 @@ instance LispAble String where
 
 instance LispAble (Maybe String) where
   asLisp   Nothing = "nil"
-  asLisp   (Just x) = surroundWith '"' '"' . escapeLisp $ x
+  asLisp   (Just x) = surroundWithQuotes . escapeLisp $ x
 
 instance LispAble (Maybe [String]) where
   asLisp   Nothing = "nil"
-  asLisp   (Just x) = surroundWith '(' ')' . unwords .
-                        map (surroundWith '"' '"' . asLisp) $ x
+  asLisp   (Just x) = surroundWithParens . unwords .
+                        map (surroundWithQuotes . asLisp) $ x
 
 instance LispAble Phone where
   asLisp (USStyle loc numbers) =
-    surroundWith '[' ']' $ surroundWith '"' '"' loc ++ " " ++ 
+    surroundWithBrackets $ surroundWithQuotes loc ++ " " ++ 
     unwords numbers
   asLisp (InternationalStyle loc numbers) =  
-    surroundWith '[' ']' $ surroundWith '"' '"' loc ++ " " ++ 
-    surroundWith '"' '"' numbers
+    surroundWithBrackets $ surroundWithQuotes loc ++ " " ++ 
+    surroundWithQuotes numbers
 
 instance LispAble (Maybe [Phone]) where
   asLisp   Nothing = "nil"
-  asLisp   (Just x) = surroundWith '(' ')' . unwords . map asLisp $ x
+  asLisp   (Just x) = surroundWithParens . unwords . map asLisp $ x
 
 instance LispAble Address where
-  asLisp x = surroundWith '[' ']' $ unwords 
+  asLisp x = surroundWithBrackets $ unwords 
     [asLisp $ Just (location x),
      asLisp (streets x),
      asLisp (city x),
@@ -440,24 +445,24 @@ instance LispAble Address where
 
 instance LispAble (Maybe [Address]) where
   asLisp   Nothing = "nil"
-  asLisp   (Just x) = surroundWith '(' ')' . unwords .
+  asLisp   (Just x) = surroundWithParens . unwords .
                         map asLisp $ x
 
 instance LispAble Alist where
-  asLisp x = surroundWith '(' ')' $
+  asLisp x = surroundWithParens $
     key x ++ " . " ++ asLisp (Just (value x))
 
 instance LispAble Note where
-  asLisp (Note x)  = surroundWith '(' ')' . unwords .
+  asLisp (Note x)  = surroundWithParens . unwords .
                       map asLisp $ x
   
 instance LispAble (Maybe Note) where
   asLisp   Nothing = "nil"
-  asLisp   (Just x) = surroundWith '(' ')' . unwords . 
+  asLisp   (Just x) = surroundWithParens . unwords . 
                         map asLisp $ unnote x
                         
 instance LispAble BBDB where
-  asLisp x = surroundWith '[' ']' $ unwords 
+  asLisp x = surroundWithBrackets $ unwords 
    [asLisp (firstName x),
     asLisp (lastName x),
     asLisp (affix x),
